@@ -1,13 +1,13 @@
 :root {
   --bg: #f7f7f5; --card: #fff; --text: #1d1d1f; --muted: #6b6b70; --line: #e4e4e0;
   --accent: #3b5bdb; --ok: #2b8a3e; --warn: #b7791f; --bad: #c92a2a;
-  --h0: #ebebe6; --h1: #c5d0f5; --h2: #7c93e8; --h3: #3b5bdb;
+  --h0: #ebebe6; --h1: #c5d0f5; --h2: #7c93e8; --h3: #3b5bdb; --on-accent: #fff;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #141416; --card: #1d1d20; --text: #ececee; --muted: #9a9aa2; --line: #2e2e33;
     --accent: #7c93e8; --ok: #51cf66; --warn: #fcc419; --bad: #ff6b6b;
-    --h0: #26262b; --h1: #2c3a6e; --h2: #4a63c4; --h3: #7c93e8;
+    --h0: #26262b; --h1: #2c3a6e; --h2: #4a63c4; --h3: #7c93e8; --on-accent: #10142a;
   }
 }
 * { box-sizing: border-box; }
@@ -19,13 +19,13 @@ main { max-width: 860px; margin: 0 auto; padding: 16px; }
   max-width: 860px; margin: 0 auto; padding: 16px; }
 .top nav { display: flex; gap: 14px; align-items: center; font-size: 14px; }
 .brand { font-weight: 700; font-size: 18px; color: var(--text); }
-.btn, button { background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+.btn, button { background: var(--accent); color: var(--on-accent); border: 0; border-radius: 8px;
   padding: 8px 14px; font: inherit; cursor: pointer; display: inline-block; }
 button.danger { background: var(--bad); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
 .card h2 { font-size: 15px; margin: 0 0 12px; }
 article h1 { margin: 6px 0 8px; font-size: 24px; }
-article h2 { margin-top: 24px; color: var(--muted); }
+article.card h2 { margin: 28px 0 8px; color: var(--muted); }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
 .tile b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
@@ -44,7 +44,7 @@ textarea.mono, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas,
 .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px;
   background: var(--h0); color: var(--text); margin-right: 4px; }
-.tag.on { background: var(--accent); color: #fff; }
+.tag.on { background: var(--accent); color: var(--on-accent); }
 .tag small { color: inherit; opacity: .6; }
 .list { display: flex; flex-direction: column; gap: 10px; }
 .entry { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
