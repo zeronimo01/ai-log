@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}연결 오류 · AI 학습 일지{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>저장소에 연결하지 못했습니다</h2>
+  <p class="pre">{{ message }}</p>
+  <p class="muted">인터넷 연결과 <code>.env</code> 설정을 확인한 뒤 <a href="{{ url_for('index') }}">다시 시도</a>하세요.</p>
+</section>
+{% endblock %}

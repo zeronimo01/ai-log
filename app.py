@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 
-from flask import (Flask, Response, abort, flash, g, redirect, render_template,
+from flask import (Flask, Response, abort, flash, redirect, render_template,
                    request, url_for)
+
+from storage import StoreError, make_store
 
 BASE_DIR = Path(__file__).resolve().parent
 STATUSES = {"success": "성공", "partial": "부분 성공", "fail": "실패"}
@@ -18,25 +19,13 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config.update(
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev-only-change-me"),
         DATABASE=os.environ.get("AILOG_DB", str(BASE_DIR / "ailog.db")),
+        SUPABASE_URL=os.environ.get("SUPABASE_URL", ""),
+        SUPABASE_SECRET_KEY=os.environ.get("SUPABASE_SECRET_KEY", ""),
     )
     if test_config:
         app.config.update(test_config)
-
-    # ---------- DB ----------
-    def get_db() -> sqlite3.Connection:
-        if "db" not in g:
-            g.db = sqlite3.connect(app.config["DATABASE"])
-            g.db.row_factory = sqlite3.Row
-        return g.db
-
-    @app.teardown_appcontext
-    def close_db(_exc):
-        db = g.pop("db", None)
-        if db is not None:
-            db.close()
-
-    with app.app_context():
-        get_db().executescript((BASE_DIR / "schema.sql").read_text())
+    store = app.config.get("STORE") or make_store(app.config)
+    app.extensions["store"] = store
 
     # ---------- helpers ----------
     def parse_form() -> tuple[dict, list[str]]:
@@ -66,30 +55,22 @@ def create_app(test_config: dict | None = None) -> Flask:
             errors.append("학습 시간은 숫자(분)로 입력하세요.")
         return data, errors
 
-    def get_entry(entry_id: int) -> sqlite3.Row:
-        row = get_db().execute("SELECT * FROM entries WHERE id = ?", (entry_id,)).fetchone()
+    def get_entry(entry_id: int) -> dict:
+        row = store.get(entry_id)
         if row is None:
             abort(404)
         return row
 
-    def query_entries(q: str = "", tag: str = "", status: str = "") -> list[sqlite3.Row]:
-        sql, args = "SELECT * FROM entries WHERE 1=1", []
-        if q:
-            sql += " AND (title LIKE ? OR learned LIKE ? OR executed LIKE ? OR result LIKE ?)"
-            args += [f"%{q}%"] * 4
-        if tag:
-            sql += " AND (',' || tags || ',') LIKE ?"
-            args.append(f"%,{tag},%")
-        if status in STATUSES:
-            sql += " AND status = ?"
-            args.append(status)
-        sql += " ORDER BY day DESC, id DESC"
-        return get_db().execute(sql, args).fetchall()
-
-    def stats() -> dict:
-        db = get_db()
-        days = {r["day"]: r["n"] for r in db.execute(
-            "SELECT day, COUNT(*) AS n FROM entries GROUP BY day")}
+    def stats(rows: list[dict]) -> dict:
+        days: dict[str, int] = {}
+        tag_counts: dict[str, int] = {}
+        minutes = ok = 0
+        for r in rows:
+            days[r["day"]] = days.get(r["day"], 0) + 1
+            minutes += r["minutes"] or 0
+            ok += r["status"] == "success"
+            for t in taglist(r["tags"]):
+                tag_counts[t] = tag_counts.get(t, 0) + 1
         today = date.today()
         # 연속 기록일 (오늘 기록이 없으면 어제부터 계산)
         streak, cur = 0, today if today.isoformat() in days else today - timedelta(days=1)
@@ -106,27 +87,24 @@ def create_app(test_config: dict | None = None) -> Flask:
                 week.append({"day": day.isoformat(), "n": days.get(day.isoformat(), 0),
                              "future": day > today})
             weeks.append(week)
-        totals = db.execute(
-            "SELECT COUNT(*) AS n, COALESCE(SUM(minutes),0) AS m, "
-            "SUM(status='success') AS ok FROM entries").fetchone()
-        tag_counts: dict[str, int] = {}
-        for r in db.execute("SELECT tags FROM entries WHERE tags != ''"):
-            for t in r["tags"].split(","):
-                tag_counts[t] = tag_counts.get(t, 0) + 1
         return {
-            "streak": streak, "weeks": weeks, "total": totals["n"],
-            "hours": round(totals["m"] / 60, 1), "days": len(days),
-            "success_rate": round(100 * (totals["ok"] or 0) / totals["n"]) if totals["n"] else 0,
+            "streak": streak, "weeks": weeks, "total": len(rows),
+            "hours": round(minutes / 60, 1), "days": len(days),
+            "success_rate": round(100 * ok / len(rows)) if rows else 0,
             "tags": sorted(tag_counts.items(), key=lambda x: (-x[1], x[0]))[:20],
         }
 
     @app.template_filter("taglist")
     def taglist(s: str) -> list[str]:
-        return [t for t in s.split(",") if t]
+        return [t for t in (s or "").split(",") if t]
 
     @app.context_processor
     def inject():
-        return {"STATUSES": STATUSES}
+        return {"STATUSES": STATUSES, "STORE_NAME": store.name}
+
+    @app.errorhandler(StoreError)
+    def store_error(e: StoreError):
+        return render_template("error.html", message=str(e)), 503
 
     # ---------- routes ----------
     @app.get("/")
@@ -134,20 +112,20 @@ def create_app(test_config: dict | None = None) -> Flask:
         q = request.args.get("q", "").strip()
         tag = request.args.get("tag", "").strip()
         status = request.args.get("status", "")
-        return render_template("index.html", entries=query_entries(q, tag, status),
-                               stats=stats(), q=q, tag=tag, status=status)
+        status = status if status in STATUSES else ""
+        filtered = store.list(q, tag, status)
+        all_rows = filtered if not (q or tag or status) else store.list()
+        return render_template("index.html", entries=filtered, stats=stats(all_rows),
+                               q=q, tag=tag, status=status)
 
     @app.route("/entries/new", methods=["GET", "POST"])
     def new_entry():
         if request.method == "POST":
             data, errors = parse_form()
             if not errors:
-                cur = get_db().execute(
-                    "INSERT INTO entries (day, title, learned, executed, result, status, tags, minutes) "
-                    "VALUES (:day, :title, :learned, :executed, :result, :status, :tags, :minutes)", data)
-                get_db().commit()
+                entry_id = store.create(data)
                 flash("기록을 저장했습니다.")
-                return redirect(url_for("detail", entry_id=cur.lastrowid))
+                return redirect(url_for("detail", entry_id=entry_id))
             for e in errors:
                 flash(e, "error")
             return render_template("form.html", entry=data, mode="new"), 400
@@ -164,11 +142,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         if request.method == "POST":
             data, errors = parse_form()
             if not errors:
-                get_db().execute(
-                    "UPDATE entries SET day=:day, title=:title, learned=:learned, executed=:executed, "
-                    "result=:result, status=:status, tags=:tags, minutes=:minutes, "
-                    "updated_at=datetime('now','localtime') WHERE id=:id", {**data, "id": entry_id})
-                get_db().commit()
+                store.update(entry_id, data)
                 flash("수정했습니다.")
                 return redirect(url_for("detail", entry_id=entry_id))
             for e in errors:
@@ -179,8 +153,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.post("/entries/<int:entry_id>/delete")
     def delete(entry_id: int):
         get_entry(entry_id)
-        get_db().execute("DELETE FROM entries WHERE id = ?", (entry_id,))
-        get_db().commit()
+        store.delete(entry_id)
         flash("삭제했습니다.")
         return redirect(url_for("index"))
 
@@ -189,7 +162,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         """전체 기록을 날짜별 마크다운으로 내보내기 (블로그/노션 붙여넣기용)."""
         lines = ["# AI 학습 일지", ""]
         current = None
-        for e in reversed(query_entries()):
+        for e in reversed(store.list()):
             if e["day"] != current:
                 current = e["day"]
                 lines += [f"## {current}", ""]
@@ -219,4 +192,9 @@ def normalize_tags(raw: str) -> str:
 
 
 if __name__ == "__main__":
-    create_app().run(debug=True, port=int(os.environ.get("PORT", 5000)))
+    from dotenv import load_dotenv
+
+    load_dotenv(BASE_DIR / ".env")
+    application = create_app()
+    print(f" * 저장소: {application.extensions['store'].name}")
+    application.run(debug=True, port=int(os.environ.get("PORT", 5000)))
