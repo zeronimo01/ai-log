@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ entry.title }} · AI 학습 일지{% endblock %}
+{% block content %}
+<article class="card">
+  <div class="meta">
+    <time>{{ entry.day }}</time>
+    <span class="status {{ entry.status }}">{{ STATUSES[entry.status] }}</span>
+    {% if entry.minutes %}<span class="muted">{{ entry.minutes }}분</span>{% endif %}
+  </div>
+  <h1>{{ entry.title }}</h1>
+  <div>{% for t in entry.tags|taglist %}<a class="tag" href="{{ url_for('index', tag=t) }}">#{{ t }}</a>{% endfor %}</div>
+
+  {% if entry.learned %}<h2>배운 것</h2><p class="pre">{{ entry.learned }}</p>{% endif %}
+  {% if entry.executed %}<h2>실행한 것</h2><pre><code>{{ entry.executed }}</code></pre>{% endif %}
+  {% if entry.result %}<h2>결과</h2><p class="pre">{{ entry.result }}</p>{% endif %}
+
+  <div class="actions">
+    <a class="btn" href="{{ url_for('edit', entry_id=entry.id) }}">수정</a>
+    <form method="post" action="{{ url_for('delete', entry_id=entry.id) }}"
+          onsubmit="return confirm('이 기록을 삭제할까요?')">
+      <button class="danger">삭제</button>
+    </form>
+    <a href="{{ url_for('index') }}">목록으로</a>
+  </div>
+  <p class="muted small">작성 {{ entry.created_at }} · 수정 {{ entry.updated_at }}</p>
+</article>
+{% endblock %}

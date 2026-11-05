@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ '새 기록' if mode == 'new' else '기록 수정' }} · AI 학습 일지{% endblock %}
+{% block content %}
+<form class="card form" method="post"
+      action="{{ url_for('new_entry') if mode == 'new' else url_for('edit', entry_id=entry.id) }}">
+  <h2>{{ '오늘의 기록' if mode == 'new' else '기록 수정' }}</h2>
+  <div class="row">
+    <label>날짜 <input type="date" name="day" value="{{ entry.day }}" required></label>
+    <label>학습 시간(분) <input type="number" name="minutes" min="0" value="{{ entry.minutes or '' }}"></label>
+    <label>결과 상태
+      <select name="status">
+        {% for k, v in STATUSES.items() %}
+          <option value="{{ k }}" {% if entry.status == k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <label>제목 <input name="title" value="{{ entry.title or '' }}" required
+         placeholder="예: LoRA로 소형 LLM 파인튜닝 해보기"></label>
+  <label>배운 것 <textarea name="learned" rows="5"
+         placeholder="개념, 논문, 강의에서 새로 알게 된 점">{{ entry.learned or '' }}</textarea></label>
+  <label>실행한 것 (코드·명령·프롬프트) <textarea class="mono" name="executed" rows="6"
+         placeholder="python train.py --lr 2e-4 --epochs 3">{{ entry.executed or '' }}</textarea></label>
+  <label>결과 <textarea name="result" rows="5"
+         placeholder="지표, 출력, 에러, 다음에 시도할 것">{{ entry.result or '' }}</textarea></label>
+  <label>태그 (쉼표 구분) <input name="tags" value="{{ (entry.tags or '').replace(',', ', ') }}"
+         placeholder="llm, fine-tuning, pytorch"></label>
+  <div class="actions">
+    <button class="btn">저장</button>
+    <a href="{{ url_for('index') if mode == 'new' else url_for('detail', entry_id=entry.id) }}">취소</a>
+  </div>
+</form>
+{% endblock %}

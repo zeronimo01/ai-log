@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="stats">
+  <div class="tile"><b>{{ stats.streak }}일</b><span>연속 기록</span></div>
+  <div class="tile"><b>{{ stats.days }}일</b><span>기록한 날</span></div>
+  <div class="tile"><b>{{ stats.total }}</b><span>전체 기록</span></div>
+  <div class="tile"><b>{{ stats.hours }}h</b><span>누적 학습</span></div>
+  <div class="tile"><b>{{ stats.success_rate }}%</b><span>실행 성공률</span></div>
+</section>
+
+<section class="card">
+  <h2>최근 12주</h2>
+  <div class="heatmap" role="img" aria-label="최근 12주 기록 히트맵">
+    {% for week in stats.weeks %}
+      <div class="col">
+        {% for d in week %}
+          <span class="cell l{{ [d.n, 3]|min }}{% if d.future %} future{% endif %}"
+                title="{{ d.day }} · {{ d.n }}건"></span>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="제목·내용 검색">
+  <select name="status">
+    <option value="">전체 상태</option>
+    {% for k, v in STATUSES.items() %}
+      <option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ v }}</option>
+    {% endfor %}
+  </select>
+  {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+  <button>검색</button>
+  {% if q or tag or status %}<a href="{{ url_for('index') }}">초기화</a>{% endif %}
+</form>
+
+{% if stats.tags %}
+<div class="tags">
+  {% for t, n in stats.tags %}
+    <a class="tag {% if t == tag %}on{% endif %}"
+       href="{{ url_for('index', tag=('' if t == tag else t), q=q, status=status) }}">#{{ t }} <small>{{ n }}</small></a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<section class="list">
+  {% for e in entries %}
+    <a class="entry" href="{{ url_for('detail', entry_id=e.id) }}">
+      <div class="meta">
+        <time>{{ e.day }}</time>
+        <span class="status {{ e.status }}">{{ STATUSES[e.status] }}</span>
+        {% if e.minutes %}<span class="muted">{{ e.minutes }}분</span>{% endif %}
+      </div>
+      <h3>{{ e.title }}</h3>
+      {% if e.result %}<p class="muted clamp">{{ e.result }}</p>{% endif %}
+      <div>{% for t in e.tags|taglist %}<span class="tag">#{{ t }}</span>{% endfor %}</div>
+    </a>
+  {% else %}
+    <p class="empty">아직 기록이 없습니다. <a href="{{ url_for('new_entry') }}">오늘의 첫 기록</a>을 남겨보세요.</p>
+  {% endfor %}
+</section>
+{% endblock %}
